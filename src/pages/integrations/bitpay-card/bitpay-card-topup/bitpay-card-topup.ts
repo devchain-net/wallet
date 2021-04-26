@@ -435,7 +435,7 @@ export class BitPayCardTopUpPage {
                 const requiredFeeRate = !this.currencyProvider.isUtxoCoin(
                   wallet.coin
                 )
-                  ? details.requiredFeeRate
+                  ? parseInt((details.requiredFeeRate * 1.1).toFixed(0), 10) // Workaround to avoid gas price supplied is lower than requested error
                   : Math.ceil(details.requiredFeeRate * 1000);
                 txp.feePerKb = requiredFeeRate;
                 this.logger.debug(
@@ -445,9 +445,7 @@ export class BitPayCardTopUpPage {
                   'Using merchant fee rate (for debit card):' + txp.feePerKb
                 );
               } else {
-                txp.feeLevel = this.feeProvider.getCoinCurrentFeeLevel(
-                  wallet.coin
-                );
+                txp.feeLevel = this.feeProvider.getDefaultFeeLevel();
               }
 
               txp['origToAddress'] = txp.toAddress;
@@ -489,7 +487,7 @@ export class BitPayCardTopUpPage {
         .getFeeRate(
           wallet.coin,
           wallet.credentials.network,
-          this.feeProvider.getCoinCurrentFeeLevel(wallet.coin)
+          this.feeProvider.getDefaultFeeLevel()
         )
         .then(feePerKb => {
           this.walletProvider
@@ -633,7 +631,10 @@ export class BitPayCardTopUpPage {
                         const payProFeeSat = !this.currencyProvider.isUtxoCoin(
                           wallet.coin
                         )
-                          ? details.requiredFeeRate
+                          ? parseInt(
+                              (details.requiredFeeRate * 1.1).toFixed(0),
+                              10
+                            ) // Workaround to avoid gas price supplied is lower than requested error
                           : Math.ceil(details.requiredFeeRate * 1000);
 
                         this.logger.debug(
@@ -700,10 +701,8 @@ export class BitPayCardTopUpPage {
     let per = (fee / (amount + fee)) * 100;
 
     if (per > FEE_TOO_HIGH_LIMIT_PER) {
-      const minerFeeInfoSheet = this.actionSheetProvider.createInfoSheet(
-        'miner-fee'
-      );
-      minerFeeInfoSheet.present();
+      const minerFeeWarning = this.actionSheetProvider.createMinerFeeWarningComponent();
+      minerFeeWarning.present({ maxHeight: '100%', minHeight: '100%' });
     }
   }
 
@@ -1153,9 +1152,12 @@ export class BitPayCardTopUpPage {
         ? this.translate.instant('Funds were added to debit card')
         : this.translate.instant('Transaction initiated');
     let finishText = '';
+    const coin = this.wallet
+      ? this.wallet.coin
+      : this.coinbaseAccount.currency.code.toLowerCase();
     let modal = this.modalCtrl.create(
       FinishModalPage,
-      { finishText, finishComment },
+      { finishText, finishComment, coin },
       { showBackdrop: true, enableBackdropDismiss: false }
     );
 

@@ -43,11 +43,11 @@ import { AddressbookPage } from './addressbook/addressbook';
 import { AdvancedPage } from './advanced/advanced';
 import { AltCurrencyPage } from './alt-currency/alt-currency';
 import { BitPayIdPage } from './bitpay-id/bitpay-id';
-import { FeePolicyPage } from './fee-policy/fee-policy';
 import { KeySettingsPage } from './key-settings/key-settings';
 import { LanguagePage } from './language/language';
 import { LocalThemePage } from './local-theme/local-theme';
 import { LockPage } from './lock/lock';
+import { NavigationPage } from './navigation/navigation';
 import { NotificationsPage } from './notifications/notifications';
 import { SharePage } from './share/share';
 import { WalletSettingsPage } from './wallet-settings/wallet-settings';
@@ -78,6 +78,7 @@ export class SettingsPage {
   public lockMethod: string;
   public integrationServices = [];
   public cardServices = [];
+  public externalServices = [];
   public bitpayCardItems = [];
   public showBitPayCard: boolean = false;
   public encryptEnabled: boolean;
@@ -97,6 +98,7 @@ export class SettingsPage {
   public tapped = 0;
   public certOnlyTapped = 0;
   public appVersion: string;
+  public navigation: string;
   private featureList: any;
   constructor(
     private navCtrl: NavController,
@@ -138,7 +140,7 @@ export class SettingsPage {
     this.logger.info('Loaded: SettingsPage');
   }
 
-  ionViewWillEnter() {
+  async ionViewWillEnter() {
     this.persistenceProvider
       .getBitpayIdPairingFlag()
       .then(res => (this.bitpayIdPairingEnabled = res === 'enabled'));
@@ -194,7 +196,7 @@ export class SettingsPage {
 
     this.showTotalBalance = this.config.totalBalance.show;
 
-    this.featureList = this.newFeatureData.get();
+    this.featureList = await this.newFeatureData.get();
   }
 
   ionViewDidEnter() {
@@ -203,11 +205,16 @@ export class SettingsPage {
 
     // Get Theme
     this.appTheme = this.themeProvider.getCurrentAppTheme();
+    this.navigation = this.themeProvider.getCurrentNavigationType();
 
     // Hide BitPay if linked
     setTimeout(() => {
       this.integrationServices = _.remove(_.clone(integrations), x => {
-        if (x.type == 'card' || (this.platformProvider.isMacApp() && !x.linked))
+        if (
+          x.type == 'card' ||
+          x.type == 'external-services' ||
+          (this.platformProvider.isMacApp() && !x.linked)
+        )
           return false;
         else return x;
       });
@@ -215,9 +222,14 @@ export class SettingsPage {
         if (
           x.name === 'debitcard' ||
           x.type === 'exchange' ||
+          x.type === 'external-services' ||
           (x.name === 'giftcards' && this.platformProvider.isMacApp())
         )
           return false;
+        else return x;
+      });
+      this.externalServices = _.remove(_.clone(integrations), x => {
+        if (x.type !== 'external-services') return false;
         else return x;
       });
     }, 200);
@@ -295,11 +307,16 @@ export class SettingsPage {
   }
 
   public openWhatsNew(): void {
-    if (this.featureList) {
+    if (this.featureList && this.featureList.features.length > 0) {
       const modal = this.modalCtrl.create(NewFeaturePage, {
         featureList: this.featureList
       });
       modal.present();
+      modal.onDidDismiss(data => {
+        if (data && data.data && typeof data.data !== 'boolean') {
+          this.events.publish('IncomingDataRedir', data.data);
+        }
+      });
     }
   }
 
@@ -313,6 +330,10 @@ export class SettingsPage {
 
   public openThemePage(): void {
     this.navCtrl.push(LocalThemePage);
+  }
+
+  public openNavigationPage(): void {
+    this.navCtrl.push(NavigationPage);
   }
 
   public openLockPage(): void {
@@ -332,10 +353,6 @@ export class SettingsPage {
 
   public openNotificationsPage(): void {
     this.navCtrl.push(NotificationsPage);
-  }
-
-  public openFeePolicyPage(): void {
-    this.navCtrl.push(FeePolicyPage);
   }
 
   public openWalletSettingsPage(walletId: string): void {
@@ -492,7 +509,7 @@ export class SettingsPage {
     const url = 'https://bitpay.com/about/privacy';
     const optIn = true;
     const title = null;
-    const message = this.translate.instant('View Privacy Policy');
+    const message = this.translate.instant('View Privacy Notice');
     const okText = this.translate.instant('Open');
     const cancelText = this.translate.instant('Go Back');
     this.externalLinkProvider.open(

@@ -16,33 +16,37 @@ import { Observable, Subscription } from 'rxjs';
 
 // Providers
 import {
+  AppProvider,
+  BitPayCardProvider,
   BitPayIdProvider,
   BitPayProvider,
+  BuyCryptoProvider,
+  CoinbaseProvider,
+  ConfigProvider,
+  DynamicLinksProvider,
+  EmailNotificationsProvider,
   GiftCardProvider,
   IABCardProvider,
   InAppBrowserProvider,
-  PersistenceProvider
+  IncomingDataProvider,
+  KeyProvider,
+  LocationProvider,
+  Logger,
+  LogsProvider,
+  PlatformProvider,
+  PopupProvider,
+  ProfileProvider,
+  PushNotificationsProvider,
+  ThemeProvider,
+  TouchIdProvider,
+  WalletConnectProvider
 } from '../providers';
-import { AppProvider } from '../providers/app/app';
-import { BitPayCardProvider } from '../providers/bitpay-card/bitpay-card';
-import { BuyCryptoProvider } from '../providers/buy-crypto/buy-crypto';
-import { CoinbaseProvider } from '../providers/coinbase/coinbase';
-import { ConfigProvider } from '../providers/config/config';
-import { DynamicLinksProvider } from '../providers/dynamic-links/dynamic-links';
-import { EmailNotificationsProvider } from '../providers/email-notifications/email-notifications';
+
 import { ExchangeCryptoProvider } from '../providers/exchange-crypto/exchange-crypto';
-import { IncomingDataProvider } from '../providers/incoming-data/incoming-data';
-import { KeyProvider } from '../providers/key/key';
-import { Logger } from '../providers/logger/logger';
-import { LogsProvider } from '../providers/logs/logs';
-import { Network } from '../providers/persistence/persistence';
-import { PlatformProvider } from '../providers/platform/platform';
-import { PopupProvider } from '../providers/popup/popup';
-import { ProfileProvider } from '../providers/profile/profile';
-import { PushNotificationsProvider } from '../providers/push-notifications/push-notifications';
-import { ThemeProvider } from '../providers/theme/theme';
-import { TouchIdProvider } from '../providers/touchid/touchid';
-import { WalletConnectProvider } from '../providers/wallet-connect/wallet-connect';
+import {
+  Network,
+  PersistenceProvider
+} from '../providers/persistence/persistence';
 
 // Components
 import { AdvertisingComponent } from '../components/advertising/advertising';
@@ -53,6 +57,7 @@ import { AddWalletPage } from '../pages/add-wallet/add-wallet';
 import { CopayersPage } from '../pages/add/copayers/copayers';
 import { ImportWalletPage } from '../pages/add/import-wallet/import-wallet';
 import { JoinWalletPage } from '../pages/add/join-wallet/join-wallet';
+import { ExchangeCryptoPage } from '../pages/exchange-crypto/exchange-crypto';
 import { FingerprintModalPage } from '../pages/fingerprint/fingerprint';
 import { BitPayCardIntroPage } from '../pages/integrations/bitpay-card/bitpay-card-intro/bitpay-card-intro';
 import { PhaseOneCardIntro } from '../pages/integrations/bitpay-card/bitpay-card-phases/phase-one/phase-one-intro-page/phase-one-intro-page';
@@ -101,6 +106,7 @@ export class CopayApp {
     AddressbookAddPage,
     AmountPage,
     BitPayCardIntroPage,
+    ExchangeCryptoPage,
     PhaseOneCardIntro,
     CoinbasePage,
     ConfirmPage,
@@ -151,7 +157,8 @@ export class CopayApp {
     private bitpayIdProvider: BitPayIdProvider,
     private themeProvider: ThemeProvider,
     private logsProvider: LogsProvider,
-    private dynamicLinksProvider: DynamicLinksProvider
+    private dynamicLinksProvider: DynamicLinksProvider,
+    private locationProvider: LocationProvider
   ) {
     this.imageLoaderConfig.setFileNameCachedWithExtension(true);
     this.imageLoaderConfig.useImageTag(true);
@@ -221,18 +228,18 @@ export class CopayApp {
         deviceInfo
     );
 
-    this.platform.pause.subscribe(() => {
-      const config = this.configProvider.get();
-      const lockMethod =
-        config && config.lock && config.lock.method
-          ? config.lock.method.toLowerCase()
-          : null;
-      if (!lockMethod || lockMethod === 'disabled') {
-        return;
-      }
+    this.locationProvider.getCountry().then(c => {
+      this.logger.info('Set location: ' + c);
     });
 
-    this.logger.debug('BitPay: setting network');
+    const network = await this.persistenceProvider.getNetwork();
+
+    if (network) {
+      this.NETWORK = network;
+    }
+
+    this.logger.debug('BitPay: setting network', this.NETWORK);
+
     [
       this.bitpayProvider,
       this.bitpayIdProvider,
@@ -455,14 +462,18 @@ export class CopayApp {
 
   private openLockModal(): void {
     if (this.appProvider.isLockModalOpen) return;
-
+    if (this.appProvider.skipLockModal && this.platformProvider.isAndroid) {
+      // workaround for android devices that execute pause for system actions
+      this.appProvider.skipLockModal = false;
+      return;
+    }
     const config = this.configProvider.get();
     const lockMethod =
       config && config.lock && config.lock.method
         ? config.lock.method.toLowerCase()
         : null;
 
-    if (!lockMethod) {
+    if (!lockMethod || lockMethod === 'disabled') {
       return;
     }
 
@@ -600,6 +611,8 @@ export class CopayApp {
         return;
       } else {
         if (nextView.params && nextView.params.deepLink) {
+          // No params -> return
+          if (nextView.name == 'DynamicLink') return;
           // From deepLink
           setTimeout(() => {
             this.getGlobalTabs()
@@ -736,6 +749,15 @@ export class CopayApp {
     } else if (pathData.indexOf('bitcoin:/') != -1) {
       this.logger.debug('Bitcoin URL found');
       this.handleOpenUrl(pathData.substring(pathData.indexOf('bitcoin:/')));
+    } else if (pathData.indexOf('ethereum:/') != -1) {
+      this.logger.debug('Ethereum URL found');
+      this.handleOpenUrl(pathData.substring(pathData.indexOf('ethereum:/')));
+    } else if (pathData.indexOf('ripple:/') != -1) {
+      this.logger.debug('Ripple URL found');
+      this.handleOpenUrl(pathData.substring(pathData.indexOf('ripple:/')));
+    } else if (pathData.indexOf('dogecoin:/') != -1) {
+      this.logger.debug('Dogecoin URL found');
+      this.handleOpenUrl(pathData.substring(pathData.indexOf('dogecoin:/')));
     } else if (pathData.indexOf(this.appProvider.info.name + '://') != -1) {
       this.logger.debug(this.appProvider.info.name + ' URL found');
       this.handleOpenUrl(

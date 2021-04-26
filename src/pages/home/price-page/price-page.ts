@@ -99,7 +99,8 @@ export class PricePage {
     this.card.totalBalanceChangeAmount = price - minPrice;
     this.card.totalBalanceChange =
       (this.card.totalBalanceChangeAmount * 100) / minPrice;
-    const customPrecision = this.card.unitCode === 'xrp' ? 4 : 2;
+    const customPrecision =
+      this.card.unitCode === 'xrp' || this.card.unitCode === 'doge' ? 4 : 2;
     document.getElementById(
       'displayPrice'
     ).textContent = `${this.formatCurrencyPipe.transform(
@@ -192,7 +193,10 @@ export class PricePage {
   }
 
   public goToAmountPage(): void {
-    this.analyticsProvider.logEvent('buy_crypto_button_clicked', {});
+    this.analyticsProvider.logEvent('buy_crypto_button_clicked', {
+      from: 'priceChartsPage',
+      coin: this.card.unitCode
+    });
     this.navCtrl.push(AmountPage, {
       coin: this.card.unitCode,
       fromBuyCrypto: true,

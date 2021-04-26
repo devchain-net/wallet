@@ -21,11 +21,14 @@ import { PurchasedCardsPage } from '../purchased-cards/purchased-cards';
 import {
   AddressProvider,
   AnalyticsProvider,
+  BitPayIdProvider,
   EmailNotificationsProvider,
   FeeProvider,
   IABCardProvider,
   IncomingDataProvider,
+  MerchantProvider,
   PersistenceProvider,
+  RateProvider,
   TxConfirmNotificationProvider
 } from '../../../../providers';
 import { ActionSheetProvider } from '../../../../providers/action-sheet/action-sheet';
@@ -109,6 +112,7 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
     private giftCardProvider: GiftCardProvider,
     public incomingDataProvider: IncomingDataProvider,
     replaceParametersProvider: ReplaceParametersProvider,
+    rateProvider: RateProvider,
     private emailNotificationsProvider: EmailNotificationsProvider,
     externalLinkProvider: ExternalLinkProvider,
     logger: Logger,
@@ -131,7 +135,9 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
     iabCardProvider: IABCardProvider,
     homeIntegrationsProvider: HomeIntegrationsProvider,
     persistenceProvider: PersistenceProvider,
-    WalletConnectProvider: WalletConnectProvider
+    WalletConnectProvider: WalletConnectProvider,
+    private bitpayIdProvider: BitPayIdProvider,
+    private merchantProvider: MerchantProvider
   ) {
     super(
       addressProvider,
@@ -154,6 +160,7 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
       profileProvider,
       popupProvider,
       replaceParametersProvider,
+      rateProvider,
       translate,
       txConfirmNotificationProvider,
       txFormatProvider,
@@ -180,7 +187,7 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
       .toLowerCase()
       .includes('gift card');
     this.onlyIntegers = this.cardConfig.currency === 'JPY';
-    this.activationFee = getActivationFee(this.amount, this.cardConfig);
+    this.activationFee = getActivationFee(+this.amount, this.cardConfig);
   }
 
   ionViewDidLoad() {
@@ -326,7 +333,6 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
       const err = this.translate.instant('No signing proposal: No private key');
       return Promise.reject(err);
     }
-
     await this.walletProvider.publishAndSign(wallet, txp);
     return this.onGoingProcessProvider.clear();
   }
@@ -348,7 +354,7 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
     const networkFee = await this.satToFiat(chain, networkFeeSat);
     this.networkFee = Number(networkFee);
     this.totalAmount =
-      this.amount -
+      +this.amount -
       this.totalDiscount +
       this.activationFee +
       this.invoiceFee +
@@ -382,6 +388,8 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
         `Unable to complete your purchase at this time. Please try again later.`
       );
     }
+
+    this.refreshCardConfigIfNeeded();
 
     throw {
       title: err_title,
@@ -485,12 +493,12 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
 
     if (details.requiredFeeRate) {
       const requiredFeeRate = !this.currencyProvider.isUtxoCoin(wallet.coin)
-        ? details.requiredFeeRate
+        ? parseInt((details.requiredFeeRate * 1.1).toFixed(0), 10) // Workaround to avoid gas price supplied is lower than requested error
         : Math.ceil(details.requiredFeeRate * 1000);
       txp.feePerKb = requiredFeeRate;
       this.logger.debug('Using merchant fee rate:' + txp.feePerKb);
     } else {
-      txp.feeLevel = this.feeProvider.getCoinCurrentFeeLevel(wallet.coin);
+      txp.feeLevel = this.feeProvider.getDefaultFeeLevel();
     }
 
     txp['origToAddress'] = txp.toAddress;
@@ -570,6 +578,8 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
   private async initialize(wallet, email) {
     const COIN = wallet.coin.toUpperCase();
     this.currencyIsoCode = this.currency;
+    this.onGoingProcessProvider.set('loadingTxInfo');
+    await this.refreshCardConfigIfNeeded().catch(_ => {});
     const discount = getVisibleDiscount(this.cardConfig);
     const dataSrc = {
       amount: this.amount,
@@ -581,8 +591,6 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
       cardName: this.cardConfig.name,
       ...(this.phone && { phone: this.phone })
     };
-
-    this.onGoingProcessProvider.set('loadingTxInfo');
 
     const data = await this.createInvoice(dataSrc).catch(err => {
       this.onGoingProcessProvider.clear();
@@ -672,6 +680,8 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
     const COIN = account.currency.code;
 
     this.currencyIsoCode = this.currency;
+    this.onGoingProcessProvider.set('loadingTxInfo');
+    await this.refreshCardConfigIfNeeded().catch(_ => {});
     const discount = getVisibleDiscount(this.cardConfig);
     const dataSrc = {
       amount: this.amount,
@@ -683,8 +693,6 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
       cardName: this.cardConfig.name,
       ...(this.phone && { phone: this.phone })
     };
-
-    this.onGoingProcessProvider.set('loadingTxInfo');
 
     const data = await this.createInvoice(dataSrc).catch(err => {
       this.onGoingProcessProvider.clear();
@@ -832,7 +840,7 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
     await this.giftCardProvider.saveCard(this.tx.giftData, {
       remove: true
     });
-    await this.walletProvider.removeTx(this.wallet, this.tx);
+    await this.walletProvider.removeTx(this.wallet, this.tx).catch(() => {});
     const errorMessage = err && err.message;
     const canceledErrors = ['FINGERPRINT_CANCELLED', 'PASSWORD_CANCELLED'];
     if (canceledErrors.indexOf(errorMessage) !== -1) {
@@ -862,6 +870,23 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
       this.isERCToken = this.currencyProvider.isERCToken(this.wallet.coin);
       const email = await this.promptEmail();
       await this.initialize(option, email).catch(() => {});
+    }
+  }
+
+  public async refreshCardConfig() {
+    this.logger.debug('Refreshing cardConfig...');
+    this.bitpayIdProvider.refreshUserInfo();
+    const cardMap = await this.giftCardProvider.getSupportedCardConfigMap(true);
+    const oldCardConfig = this.cardConfig;
+    this.cardConfig = cardMap[this.cardConfig.name] || oldCardConfig;
+    this.logger.debug('Refreshed cardConfig');
+    this.merchantProvider.refreshMerchants();
+  }
+
+  public async refreshCardConfigIfNeeded() {
+    const shouldSync = await this.giftCardProvider.shouldSyncGiftCardPurchasesWithBitPayId();
+    if (shouldSync) {
+      this.refreshCardConfig();
     }
   }
 
@@ -928,9 +953,12 @@ export class ConfirmCardPurchasePage extends ConfirmPage {
     }
 
     let finishText = '';
+    const coin = this.wallet
+      ? this.wallet.coin
+      : this.coinbaseAccount.currency.code.toLowerCase();
     let modal = this.modalCtrl.create(
       FinishModalPage,
-      { finishText, finishComment, cssClass },
+      { finishText, finishComment, cssClass, coin },
       { showBackdrop: true, enableBackdropDismiss: false }
     );
     await modal.present();

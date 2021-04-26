@@ -79,12 +79,12 @@ const Keys = {
   BITPAY_ID_PAIRING_TOKEN: network => `bitpayIdToken-${network}`,
   BITPAY_ID_USER_INFO: network => `bitpayIdUserInfo-${network}`,
   BITPAY_ID_SETTINGS: network => `bitpayIdSettings-${network}`,
-  APP_THEME: 'app-theme',
   USER_LOCATION: 'user-location',
   COUNTRIES: 'countries',
   CARD_FAST_TRACK_ENABLED: 'cardFastTrackEnabled',
   TEMP_MDES_DEBUG_FLAG: 'tempMdesDebugFlag',
-  TEMP_MDES_CERT_ONLY_DEBUG_FLAG: 'tempMdesCertOnlyDebugFlag'
+  TEMP_MDES_CERT_ONLY_DEBUG_FLAG: 'tempMdesCertOnlyDebugFlag',
+  NETWORK: 'network'
 };
 
 interface Storage {
@@ -527,7 +527,9 @@ export class PersistenceProvider {
       email: string;
       token: string;
       familyName?: string; // last name
-      givenName?: string; // firstName
+      givenName?: string; // firstName,
+      incentiveLevel?: string;
+      incentiveLevelId?: string;
     }
   ) {
     return this.getBitpayAccounts(network).then(allAccounts => {
@@ -726,7 +728,7 @@ export class PersistenceProvider {
     return this.storage.remove('lockStatus');
   }
 
-  setNewFeatureSlidesFlag(value: number) {
+  setNewFeatureSlidesFlag(value: string) {
     return this.storage.set('newFeatureSlides', value);
   }
 
@@ -882,14 +884,6 @@ export class PersistenceProvider {
     return this.storage.get('reachedCardLimit');
   }
 
-  setAppTheme(value: string) {
-    return this.storage.set(Keys.APP_THEME, value);
-  }
-
-  getAppTheme() {
-    return this.storage.get(Keys.APP_THEME);
-  }
-
   setUserLocation(location: string) {
     return this.storage.set(Keys.USER_LOCATION, location);
   }
@@ -940,6 +934,14 @@ export class PersistenceProvider {
 
   removeDynamicLink() {
     return this.storage.remove('BitPay-DynamicLink');
+  }
+
+  setNetwork(network: 'livenet' | 'testnet' | undefined) {
+    return this.storage.set(Keys.NETWORK, network);
+  }
+
+  getNetwork() {
+    return this.storage.get(Keys.NETWORK);
   }
 }
 

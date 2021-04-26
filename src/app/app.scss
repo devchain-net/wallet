@@ -275,6 +275,10 @@ ion-spinner * {
   background-color: #000000;
 }
 
+.doge-background {
+  background-color: #d8c172;
+}
+
 button.item {
   &.activated {
     background-color: $feather;
@@ -782,6 +786,7 @@ ion-tabs {
     display: none;
     content: url('../assets/img/tab-icons/tab-home-active.svg')
       url('../assets/img/tab-icons/tab-wallets-active.svg')
+      url('../assets/img/tab-icons/tab-transact.svg')
       url('../assets/img/tab-icons/tab-scan.svg')
       url('../assets/img/tab-icons/tab-copay-scan.svg')
       url('../assets/img/tab-icons/tab-cards-active.svg')
@@ -800,12 +805,7 @@ $wallets-active: url('../assets/img/tab-icons/tab-wallets-active.svg') no-repeat
   50% 50%;
 $wallets-inactive: url('../assets/img/tab-icons/tab-wallets.svg') no-repeat 50%
   50%;
-$scan-active: url('../assets/img/tab-icons/tab-scan-active.svg') no-repeat 50%
-  50%;
-$scan-inactive: url('../assets/img/tab-icons/tab-scan.svg') no-repeat 50% 50%;
-$copay-scan-active: url('../assets/img/scan-ico.svg') no-repeat 50% 50%;
-$copay-scan-inactive: url('../assets/img/tab-icons/tab-copay-scan.svg')
-  no-repeat 50% 50%;
+$transact: url('../assets/img/tab-icons/tab-transact.svg') no-repeat 50% 50%;
 $cards-active: url('../assets/img/tab-icons/tab-cards-active.svg') no-repeat 50%
   50%;
 $cards-inactive: url('../assets/img/tab-icons/tab-cards.svg') no-repeat 50% 50%;
@@ -813,6 +813,12 @@ $settings-active: url('../assets/img/tab-icons/tab-settings-active.svg')
   no-repeat 50% 50%;
 $settings-inactive: url('../assets/img/tab-icons/tab-settings.svg') no-repeat
   50% 50%;
+$scan-active: url('../assets/img/tab-icons/tab-scan-active.svg') no-repeat 50%
+  50%;
+$scan-inactive: url('../assets/img/tab-icons/tab-scan.svg') no-repeat 50% 50%;
+$copay-scan-active: url('../assets/img/scan-ico.svg') no-repeat 50% 50%;
+$copay-scan-inactive: url('../assets/img/tab-icons/tab-copay-scan.svg')
+  no-repeat 50% 50%;
 
 ion-icon {
   &[class*='tab-'] {
@@ -839,6 +845,18 @@ ion-icon {
 
     .tab-button[aria-selected='true'] & {
       background: $wallets-active;
+      background-size: contain;
+    }
+  }
+
+  &[class*='tab-transact'] {
+    background: $transact;
+    background-size: contain;
+    width: 36px;
+    height: 36px !important;
+
+    .tab-button[aria-selected='true'] & {
+      background: $transact;
       background-size: contain;
     }
   }
